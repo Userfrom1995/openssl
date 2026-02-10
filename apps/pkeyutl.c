@@ -15,6 +15,16 @@
 #include <openssl/evp.h>
 #include <sys/stat.h>
 
+/* Platform-specific includes for memory mapping */
+#ifdef _WIN32
+# include <windows.h>
+# include <io.h>  /* for _get_osfhandle */
+#else
+# include <sys/mman.h>
+# include <fcntl.h>
+# include <unistd.h>
+#endif
+
 #define KEY_NONE 0
 #define KEY_PRIVKEY 1
 #define KEY_PUBKEY 2
@@ -40,6 +50,23 @@ static int do_raw_keyop(int pkey_op, EVP_MD_CTX *mctx,
     EVP_PKEY *pkey, BIO *in,
     int filesize, unsigned char *sig, size_t siglen,
     unsigned char **out, size_t *poutlen);
+
+/* Memory mapping helper structures */
+typedef struct {
+    void *addr;          /* Mapped memory address */
+    size_t length;       /* Size of mapped region */
+#ifdef _WIN32
+    HANDLE hFile;        /* Windows file handle */
+    HANDLE hMapping;     /* Windows mapping handle */
+#else
+    int fd;              /* Unix file descriptor */
+#endif
+} MappedFile;
+
+/* Memory mapping helper functions */
+static MappedFile* map_file(BIO *in, size_t *size);
+static void unmap_file(MappedFile *mf);
+static int get_file_size(BIO *in, int *filesize);
 
 static int only_nomd(EVP_PKEY *pkey)
 {
@@ -832,34 +859,67 @@ static int do_raw_keyop(int pkey_op, EVP_MD_CTX *mctx,
 
     /* Some algorithms only support oneshot digests */
     if (only_nomd(pkey)) {
+        MappedFile *mapped_file = NULL;
+        
         if (filesize < 0) {
             BIO_printf(bio_err,
                 "Error: unable to determine file size for oneshot operation\n");
             goto end;
         }
-        if (filesize > 0)
+        
+        if (filesize > 0) {
+            /* Try memory mapping first */
+            size_t map_size = (size_t)filesize;
+            mapped_file = map_file(in, &map_size);
+            
+            if (mapped_file != NULL) {
+                /* Memory mapping succeeded - use mapped memory directly */
+                switch (pkey_op) {
+                case EVP_PKEY_OP_VERIFY:
+                    rv = EVP_DigestVerify(mctx, sig, siglen, 
+                                        (unsigned char *)mapped_file->addr, 
+                                        mapped_file->length);
+                    break;
+                case EVP_PKEY_OP_SIGN:
+                    rv = EVP_DigestSign(mctx, NULL, poutlen,
+                                       (unsigned char *)mapped_file->addr,
+                                       mapped_file->length);
+                    if (rv == 1 && out != NULL) {
+                        *out = app_malloc(*poutlen, "buffer output");
+                        rv = EVP_DigestSign(mctx, *out, poutlen,
+                                           (unsigned char *)mapped_file->addr,
+                                           mapped_file->length);
+                    }
+                    break;
+                }
+                unmap_file(mapped_file);
+                goto end;
+            }
+            
+            /* Memory mapping failed - fall back to traditional allocation */
             mbuf = app_malloc(filesize, "oneshot sign/verify buffer");
-        switch (pkey_op) {
-        case EVP_PKEY_OP_VERIFY:
-            buf_len = BIO_read(in, mbuf, filesize);
-            if (buf_len != filesize) {
-                BIO_printf(bio_err, "Error reading raw input data\n");
-                goto end;
+            switch (pkey_op) {
+            case EVP_PKEY_OP_VERIFY:
+                buf_len = BIO_read(in, mbuf, filesize);
+                if (buf_len != filesize) {
+                    BIO_printf(bio_err, "Error reading raw input data\n");
+                    goto end;
+                }
+                rv = EVP_DigestVerify(mctx, sig, siglen, mbuf, buf_len);
+                break;
+            case EVP_PKEY_OP_SIGN:
+                buf_len = BIO_read(in, mbuf, filesize);
+                if (buf_len != filesize) {
+                    BIO_printf(bio_err, "Error reading raw input data\n");
+                    goto end;
+                }
+                rv = EVP_DigestSign(mctx, NULL, poutlen, mbuf, buf_len);
+                if (rv == 1 && out != NULL) {
+                    *out = app_malloc(*poutlen, "buffer output");
+                    rv = EVP_DigestSign(mctx, *out, poutlen, mbuf, buf_len);
+                }
+                break;
             }
-            rv = EVP_DigestVerify(mctx, sig, siglen, mbuf, buf_len);
-            break;
-        case EVP_PKEY_OP_SIGN:
-            buf_len = BIO_read(in, mbuf, filesize);
-            if (buf_len != filesize) {
-                BIO_printf(bio_err, "Error reading raw input data\n");
-                goto end;
-            }
-            rv = EVP_DigestSign(mctx, NULL, poutlen, mbuf, buf_len);
-            if (rv == 1 && out != NULL) {
-                *out = app_malloc(*poutlen, "buffer output");
-                rv = EVP_DigestSign(mctx, *out, poutlen, mbuf, buf_len);
-            }
-            break;
         }
         goto end;
     }
@@ -908,4 +968,85 @@ static int do_raw_keyop(int pkey_op, EVP_MD_CTX *mctx,
 end:
     OPENSSL_free(mbuf);
     return rv;
+}
+
+/* Memory mapping helper functions implementation */
+
+static int get_file_size(BIO *in, int *filesize)
+{
+    struct stat st;
+    int fd;
+    
+    if (BIO_get_fd(in, &fd) <= 0)
+        return 0;
+    
+    if (fstat(fd, &st) < 0)
+        return 0;
+    
+    *filesize = st.st_size;
+    return 1;
+}
+
+static MappedFile* map_file(BIO *in, size_t *size)
+{
+    MappedFile *mf = NULL;
+    int fd;
+    
+    if (BIO_get_fd(in, &fd) <= 0)
+        return NULL;
+    
+    mf = OPENSSL_zalloc(sizeof(*mf));
+    if (mf == NULL)
+        return NULL;
+    
+#ifdef _WIN32
+    /* Windows implementation */
+    mf->hFile = (HANDLE)_get_osfhandle(fd);
+    if (mf->hFile == INVALID_HANDLE_VALUE)
+        goto err;
+    
+    mf->length = *size;
+    mf->hMapping = CreateFileMapping(mf->hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (mf->hMapping == NULL)
+        goto err;
+    
+    mf->addr = MapViewOfFile(mf->hMapping, FILE_MAP_READ, 0, 0, mf->length);
+    if (mf->addr == NULL)
+        goto err;
+#else
+    /* Unix implementation */
+    mf->fd = fd;
+    mf->length = *size;
+    
+    mf->addr = mmap(NULL, mf->length, PROT_READ, MAP_PRIVATE, mf->fd, 0);
+    if (mf->addr == MAP_FAILED)
+        goto err;
+#endif
+    
+    return mf;
+
+err:
+    unmap_file(mf);
+    return NULL;
+}
+
+static void unmap_file(MappedFile *mf)
+{
+    if (mf == NULL)
+        return;
+    
+#ifdef _WIN32
+    if (mf->addr != NULL) {
+        UnmapViewOfFile(mf->addr);
+    }
+    if (mf->hMapping != NULL) {
+        CloseHandle(mf->hMapping);
+    }
+#else
+    if (mf->addr != NULL && mf->addr != MAP_FAILED) {
+        munmap(mf->addr, mf->length);
+    }
+#endif
+    
+    OPENSSL_free(mf);
 }
