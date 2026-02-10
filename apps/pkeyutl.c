@@ -66,7 +66,7 @@ typedef struct {
 /* Memory mapping helper functions */
 static MappedFile* map_file(BIO *in, size_t *size);
 static void unmap_file(MappedFile *mf);
-static int get_file_size(BIO *in, int *filesize);
+// static int get_file_size(BIO *in, int *filesize);
 
 static int only_nomd(EVP_PKEY *pkey)
 {
@@ -972,20 +972,20 @@ end:
 
 /* Memory mapping helper functions implementation */
 
-static int get_file_size(BIO *in, int *filesize)
-{
-    struct stat st;
-    int fd;
+// static int get_file_size(BIO *in, int *filesize)
+// {
+//     struct stat st;
+//     int fd;
     
-    if (BIO_get_fd(in, &fd) <= 0)
-        return 0;
+//     if (BIO_get_fd(in, &fd) <= 0)
+//         return 0;
     
-    if (fstat(fd, &st) < 0)
-        return 0;
+//     if (fstat(fd, &st) < 0)
+//         return 0;
     
-    *filesize = st.st_size;
-    return 1;
-}
+//     *filesize = st.st_size;
+//     return 1;
+// }
 
 static MappedFile* map_file(BIO *in, size_t *size)
 {
