@@ -104,6 +104,7 @@ ignore-words-list =
     DOUT,
     dum,
     dur,
+    ecret,
     Dur,
     Durin,
     ect,

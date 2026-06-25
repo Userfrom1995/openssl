@@ -48,6 +48,12 @@ jobs:
               echo "FOUND_NEWS_CHANGES_ADDITION=no" >> $GITHUB_ENV
             fi
           fi
+      - name: "Validate NEWS/CHANGES formatting"
+        if: ${{ env.FOUND_NEWS_CHANGES_ADDITION == 'yes' }}
+        run: |
+          grep -q "CHANGES\.md" names.txt && util/check-changes-format.sh CHANGES.md
+          grep -q "NEWS\.md" names.txt && util/check-changes-format.sh NEWS.md
+
       - name: "Check if this PR affects a CVE"
         if: ${{ env.FOUND_NEWS_CHANGES_ADDITION == 'no' && env.SKIP_NEWS_CHECK == 'no' }}
         run: |

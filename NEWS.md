@@ -34,7 +34,7 @@ OpenSSL 4.0
   * libcrypto no longer cleans up globally allocated data via atexit()
 
   * ENGINE support was removed. The `no-engine` build option and the
-   `OPENSSL_NO_ENGINE` macro is always present.
+    `OPENSSL_NO_ENGINE` macro is always present.
 
   * The crypto-mdebug-backtrace configuration option has been entirely removed.
 
