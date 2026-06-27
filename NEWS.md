@@ -1346,7 +1346,7 @@ OpenSSL 1.0.2
 ### Major changes between OpenSSL 1.0.2a and OpenSSL 1.0.2b [11 Jun 2015]
 
   * Malformed ECParameters causes infinite loop ([CVE-2015-1788])
-  * Exploitable out-of-bounds read in X509_cmp_time ([CVE-2015-1789])
+* Exploitable out-of-bounds read in X509_cmp_time ([CVE-2015-1789])
   * PKCS7 crash with missing EnvelopedContent ([CVE-2015-1790])
   * CMS verify infinite loop with unknown hash function ([CVE-2015-1792])
   * Race condition handling NewSessionTicket ([CVE-2015-1791])

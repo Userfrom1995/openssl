@@ -4310,7 +4310,7 @@ breaking changes, and mappings for the large list of deprecated functions.
 
    *David von Oheimb*
 
- * Allow sign extension in OSSL_PARAM_allocate_from_text() for the
+* Allow sign extension in OSSL_PARAM_allocate_from_text() for the
    OSSL_PARAM_INTEGER data type and return error on negative numbers
    used with the OSSL_PARAM_UNSIGNED_INTEGER data type. Make
    OSSL_PARAM_BLD_push_BN{,_pad}() return an error on negative numbers.
