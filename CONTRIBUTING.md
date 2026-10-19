@@ -190,6 +190,14 @@ guidelines:
     This file helps users get more in-depth information of what comes
     with a specific release without having to sift through the higher
     noise ratio in git-log.
+    Follow the formatting conventions in
+    [dev/CHANGES-FORMAT.md](dev/CHANGES-FORMAT.md); CI checks the current
+    release section.  You can run the same check locally with:
+
+        perl util/check-changes-format.pl CHANGES.md
+
+    NEWS.md entries follow the conventions in
+    [dev/NEWS-FORMAT.md](dev/NEWS-FORMAT.md) and are checked in the same way.
 
  9. Guidelines on how to integrate error output of new crypto library modules
     can be found in [crypto/err/README.md](crypto/err/README.md).

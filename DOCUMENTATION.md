@@ -158,10 +158,12 @@ Changes and news
 ----------------
 
 Significant modifications should be documented in the
-[CHANGES.md](CHANGES.md) file.
+[CHANGES.md](CHANGES.md) file.  Follow the formatting conventions in
+[dev/CHANGES-FORMAT.md](dev/CHANGES-FORMAT.md).
 
 Very significant features and changes should be documented in the
-[NEWS.md](NEWS.md) file.
+[NEWS.md](NEWS.md) file.  Follow the editorial and formatting conventions in
+[dev/NEWS-FORMAT.md](dev/NEWS-FORMAT.md).
 
 In both cases, the added note should be short and to the point, and
 should be written for users of the library, focusing on impact rather
